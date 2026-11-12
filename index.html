@@ -77,6 +77,9 @@ header.top { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; alig
 .geomap { aspect-ratio: 4 / 3; border: 1px solid #a8916a; background: #cdbb95; }
 .geomap .leaflet-tile-pane { filter: sepia(.6) saturate(.7) brightness(.97) contrast(1.05); }
 .geomap .leaflet-control-attribution { font-size: 10px; background: rgba(230,216,184,.8); }
+.gate { border: 1px dashed var(--wax); background: rgba(143,29,29,.06); padding: 10px 12px; margin: 4px 0 10px; }
+.gate.ok { border-style: solid; border-color: rgba(79,106,69,.6); background: rgba(79,106,69,.1); color: var(--moss); font-family: var(--font-label); letter-spacing: .04em; font-size: 15px; }
+.aard.locked svg { opacity: .35; pointer-events: none; filter: grayscale(.6); }
 .mnote { font-size: 14px; color: var(--ink-soft); margin: 0; font-style: italic; }
 @keyframes shake { 0%,100% { transform: rotate(0); } 10%,30%,50%,70% { transform: rotate(-10deg) translateX(-2px); } 20%,40%,60% { transform: rotate(10deg) translateX(2px); } 80% { transform: rotate(-3deg); } }
 @keyframes quiver { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-1px) rotate(-2deg); } 75% { transform: translateX(1px) rotate(2deg); } }
@@ -391,6 +394,9 @@ const GEO = {
 /* Kam medailon vede během jednotlivých stanovišť */
 /* Trasa stopy od hospody k místu činu pro zaklínačské smysly: body [šířka, délka] po cestě (stačí 5–15 bodů). null = ukázková stopa. */
 const TRAIL = null;
+/* Měkký zámek polohou: úkol se odemkne až v okruhu místa. Bez souřadnic je zámek vypnutý. */
+const GATE = { mistocinu: "babka", doupe: "doupe", boj: "socha" };
+const GATE_RADIUS_M = 80;
 const STAGE_TARGET = { zakazka: null, hospoda: s => state.senses.hospoda ? "mistoCinu" : "hospoda", mistocinu: null, babka: null, pivovar: "pivovar", doupe: "doupe", boj: "socha" };
 
 /* ======================================================================
@@ -512,7 +518,7 @@ const CONFIG = {
 const STEPS = CONFIG.stages;
 const KEY = "mokry-hon-v3";
 const fill = s => String(s ?? "").replace(/\{(\w+)\}/g, (m, k) => PLACES[k] ?? m);
-const blank = () => ({ step: -1, solved: {}, hints: {}, nextHintAt: {}, demo: true, sound: false, startedAt: 0, finishedAt: 0, masterUsed: 0, fresh: null, senses: {}, evidence: [], aard: false, maze: null, trailSeen: [], sensesEnd: false });
+const blank = () => ({ step: -1, solved: {}, hints: {}, nextHintAt: {}, demo: true, sound: false, startedAt: 0, finishedAt: 0, masterUsed: 0, fresh: null, senses: {}, evidence: [], aard: false, maze: null, trailSeen: [], sensesEnd: false, gateOk: {}, gatePenalty: 0 });
 let state = blank();
 function load(saved) {
   if (saved && typeof saved.step === "number") return Object.assign(blank(), saved);
@@ -825,11 +831,11 @@ function renderIntro() {
 
 /* ---------------- Stanoviště ---------------- */
 function lockHTML(s, solved) {
-  const fin = s.type === "finale";
+  const fin = s.type === "finale", gated = !solved && gateActive(s);
   return `<form class="lock" id="lock" autocomplete="off">
       <label for="answer" class="kicker" style="color:var(--ink-soft)">${fin ? "Slovo moci" : "Odpověď"}</label>
-      <div class="row"><input type="text" id="answer" ${solved ? "disabled" : ""} placeholder="${solved ? "Stopa odemčena" : "Napište odpověď"}">
-      <button class="btn" type="submit" ${solved ? "disabled" : ""}>${fin ? "Zasadit ránu" : "Ověřit"}</button></div>
+      <div class="row"><input type="text" id="answer" ${solved || gated ? "disabled" : ""} placeholder="${solved ? "Stopa odemčena" : gated ? "Nejdřív dojděte na místo" : "Napište odpověď"}">
+      <button class="btn" type="submit" ${solved || gated ? "disabled" : ""}>${fin ? "Zasadit ránu" : "Ověřit"}</button></div>
       <p class="msg" id="msg"></p>
       ${state.demo && !solved ? `<p class="demo-answer">Ukázková odpověď: <b>${fill(s.answers[0])}</b></p>` : ""}
     </form>`;
@@ -868,9 +874,10 @@ function renderStage(s) {
       <p>${s.travel}</p>
       ${s.riddle ? `<div class="riddle"><b>Indicie</b>${fill(s.riddle)}</div>` : ""}
       ${solved ? "" : medalHTML(s)}
+      ${s.type === "lair" && !solved ? gateHTML(s) : ""}
       ${special}
       <div class="block ${showLock && !lockReady && !solved ? "hidden" : ""}" id="lockBlock">
-        ${showLock ? `<h3>${s.type === "finale" ? "Souboj" : "Na místě"}</h3><p>${fill(s.task)}</p>${lockHTML(s, solved)}` : ""}
+        ${showLock ? `<h3>${s.type === "finale" ? "Souboj" : "Na místě"}</h3><p>${fill(s.task)}</p>${solved ? "" : gateHTML(s)}${lockHTML(s, solved)}` : ""}
         ${solved ? "" : helpHTML(s)}
       </div>
       ${solved ? `
@@ -882,6 +889,7 @@ function renderStage(s) {
     </article>`;
   state.fresh = null;
   wireListen();
+  if (!solved) wireGate(s);
   if (!solved && s.type !== "senses") wireMedal(s); else if (solved) stopGeo();
   if (s.type === "senses") wireSenses(s);
   if (s.type === "evidence") wireEvidence(s);
@@ -1252,14 +1260,14 @@ function lairHTML(s) {
       return `<polygon class="rock" points="${pts}" fill="hsl(30 ${8 + i % 3 * 4}% ${18 + i % 4 * 4}%)" stroke="#0a0807" stroke-width=".6"/>`; }).join("");
     const pts = RUNE.map(([x, y], i) => `<g><circle class="rune-pt" data-i="${i}" cx="${x}" cy="${y}" r="3.2" fill="#3a2a1c" stroke="#ff9a4a" stroke-width=".8"/><text x="${x + (i === 1 ? 0 : 0)}" y="${y - 5.5}" text-anchor="middle" font-size="5" fill="#ffcf9a" font-family="Alegreya SC, Georgia, serif">${i + 1}</text></g>`).join("");
     return `<h3 style="font-family:var(--font-label);letter-spacing:.1em;font-size:15px;color:var(--ink-soft);margin:6px 0">Znamení Aard</h3><p>${s.aardIntro}</p>
-      <div class="aard" id="aard"><svg viewBox="0 0 100 100" id="aardsvg" aria-label="Runa znamení Aard k obtažení">
+      <div class="aard ${gateActive(s) ? "locked" : ""}" id="aard"><svg viewBox="0 0 100 100" id="aardsvg" aria-label="Runa znamení Aard k obtažení">
         <defs><filter id="aglow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="1.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter></defs>
         <g id="rocks">${rocks}</g>
         <polyline points="${RUNE.map(p => p.join(",")).join(" ")}" fill="none" stroke="#ff9a4a" stroke-width=".6" stroke-dasharray="1.5 2" opacity=".55"/>
         <polyline id="traced" class="runeline" points="" fill="none" stroke="#ff7a1f" stroke-width="3" stroke-linecap="round" stroke-linejoin="round" filter="url(#aglow)"/>
         <line id="live" x1="0" y1="0" x2="0" y2="0" stroke="#ffb347" stroke-width="1.6" stroke-linecap="round" opacity="0" filter="url(#aglow)"/>
         ${pts}
-      </svg><div class="help" id="aardHelp">Začněte na jedničce</div></div>`;
+      </svg><div class="help" id="aardHelp">${gateActive(s) ? "Znamení zapůsobí až u vchodu do doupěte" : "Začněte na jedničce"}</div></div>`;
   }
   return `<h3 style="font-family:var(--font-label);letter-spacing:.1em;font-size:15px;color:var(--ink-soft);margin:6px 0">Cesta jeskyní</h3><p>${s.mazeIntro}</p>
     <div class="maze" id="maze"></div>
@@ -1492,8 +1500,49 @@ function wireMedal(s) {
   }
 }
 
+/* ---------------- Měkký zámek polohou ---------------- */
+function gateActive(s) { const k = GATE[s.id]; return !!(k && GEO[k]) && !(state.gateOk || {})[s.id]; }
+function gateHTML(s) {
+  const k = GATE[s.id]; if (!k) return "";
+  if (!GEO[k]) return state.demo ? `<p class="mnote" style="margin:0 0 8px">Zámek polohou je zatím vypnutý, chybí souřadnice místa.</p>` : "";
+  if ((state.gateOk || {})[s.id]) return `<p class="gate ok">Medailon potvrdil, že jste na místě.</p>`;
+  return `<div class="gate" id="gate"><p style="margin:0 0 8px">${s.type === "lair" ? "Znamení zapůsobí jen u vchodu do doupěte." : "Odpověď se odemkne, až budete na místě."}</p>
+    <div class="mrow" style="display:flex;gap:8px;flex-wrap:wrap"><button type="button" class="ghost" id="gateBtn">Jsme na místě</button>
+    ${state.demo ? `<button type="button" class="ghost" id="gateSkip" style="font-size:14px;padding:4px 8px">Přeskočit zámek (jen v ukázce)</button>` : ""}</div>
+    <p class="msg" id="gmsg"></p><div id="gateEsc"></div></div>`;
+}
+const GT = {};
+function wireGate(s) {
+  const b = $("#gateBtn"); if (!b) return;
+  const k = GATE[s.id], gm = t => { const m = $("#gmsg"); if (m) m.textContent = t; };
+  GT[s.id] = GT[s.id] || { tries: 0, first: 0 };
+  const pass = (penalty) => { state.gateOk[s.id] = true; if (penalty) state.gatePenalty = (state.gatePenalty || 0) + 1; save();
+    SFX.force_play("medallion"); buzz([60, 40, 120]); shake(); renderStage(s);
+    const t = s.type === "lair" ? $("#aard") : $("#answer"); if (t) t.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" }); };
+  const escape = () => { const e = $("#gateEsc"); if (!e || e.firstChild) return;
+    e.innerHTML = `<button type="button" class="ghost" id="gateEscBtn" style="margin-top:4px">Medailon nic necítí. Odemknout i tak (stojí jednu nápovědu)</button>`;
+    $("#gateEscBtn").addEventListener("click", () => pass(true)); };
+  if (GT[s.id].tries >= 2) escape();
+  const sk = $("#gateSkip"); if (sk) sk.addEventListener("click", () => pass(false));
+  b.addEventListener("click", () => {
+    if (!("geolocation" in navigator)) { gm("Tenhle prohlížeč polohu neumí."); escape(); return; }
+    b.disabled = true; gm("Medailon naslouchá…");
+    const done = () => { b.disabled = false; };
+    try {
+      navigator.geolocation.getCurrentPosition(p => {
+        done(); const d = dist([p.coords.latitude, p.coords.longitude], GEO[k]), acc = Math.min(p.coords.accuracy || 0, 100);
+        if (d - acc <= GATE_RADIUS_M) { pass(false); return; }
+        GT[s.id].tries++; SFX.play("wrong");
+        gm("Medailon mlčí, tady to ještě není." + (state.demo ? ` [${Math.round(d)} m, přesnost ±${Math.round(p.coords.accuracy || 0)} m]` : "") + (GT[s.id].tries >= 2 ? " Jste-li si jistí, že stojíte na správném místě, můžete zámek obejít." : " Zkuste to znovu, až budete blíž."));
+        if (GT[s.id].tries >= 2) escape();
+      }, err => { done(); GT[s.id].tries = 2; gm(err.code === 1 ? "Přístup k poloze je zakázaný." : "Polohu se nepodařilo zjistit."); escape(); },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 });
+    } catch (e) { done(); gm("Poloha tu nefunguje."); escape(); }
+  });
+}
+
 /* ---------------- Konec ---------------- */
-function rank() { const h = Object.values(state.hints).reduce((a, b) => a + b, 0);
+function rank() { const h = Object.values(state.hints).reduce((a, b) => a + b, 0) + (state.gatePenalty || 0);
   if (state.masterUsed === 0 && h <= 3) return "Mistr cechu"; if (h <= 7 && state.masterUsed <= 1) return "Ostřílený lovec"; return "Učeň se stříbrným srdcem"; }
 function renderEnding() {
   const e = CONFIG.ending, h = Object.values(state.hints).reduce((a, b) => a + b, 0);
