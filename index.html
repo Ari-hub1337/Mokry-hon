@@ -59,6 +59,18 @@ header.top { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; alig
 .medallion { width: 66px; height: 66px; filter: drop-shadow(0 3px 6px rgba(0,0,0,.6)); cursor: pointer; }
 .medallion.shake { animation: shake .9s ease-in-out; }
 .medallion.quiver { animation: quiver .25s linear 6; }
+.medallion.near { animation: quiver var(--q, .5s) linear infinite; }
+.medal { margin: 6px 0 12px; padding: 12px 14px; border: 1px solid rgba(90,74,58,.45); background: rgba(43,33,24,.06); display: grid; gap: 10px; }
+.medal .mrow { display: flex; gap: 8px; flex-wrap: wrap; }
+.medal .mstate { display: flex; align-items: center; gap: 10px; font-size: 16px; }
+.mbar { flex: none; display: flex; gap: 3px; align-items: flex-end; height: 22px; }
+.mbar i { width: 5px; background: rgba(90,74,58,.25); display: block; }
+.mbar i:nth-child(1) { height: 30%; } .mbar i:nth-child(2) { height: 50%; } .mbar i:nth-child(3) { height: 70%; } .mbar i:nth-child(4) { height: 85%; } .mbar i:nth-child(5) { height: 100%; }
+.mbar i.on { background: var(--ember); box-shadow: 0 0 6px rgba(255,122,31,.7); }
+.geomap { aspect-ratio: 4 / 3; border: 1px solid #a8916a; background: #cdbb95; }
+.geomap .leaflet-tile-pane { filter: sepia(.6) saturate(.7) brightness(.97) contrast(1.05); }
+.geomap .leaflet-control-attribution { font-size: 10px; background: rgba(230,216,184,.8); }
+.mnote { font-size: 14px; color: var(--ink-soft); margin: 0; font-style: italic; }
 @keyframes shake { 0%,100% { transform: rotate(0); } 10%,30%,50%,70% { transform: rotate(-10deg) translateX(-2px); } 20%,40%,60% { transform: rotate(10deg) translateX(2px); } 80% { transform: rotate(-3deg); } }
 @keyframes quiver { 0%,100% { transform: translateX(0); } 25% { transform: translateX(-1px) rotate(-2deg); } 75% { transform: translateX(1px) rotate(2deg); } }
 .top h1 { margin: 0; font-family: var(--font-display); font-weight: 400; font-size: 40px; line-height: .95; color: var(--silver); }
@@ -342,6 +354,21 @@ const PLACES = {
 };
 
 /* ======================================================================
+   SOUŘADNICE MÍST pro medailon a mapu: [zeměpisná šířka, délka],
+   např. z Mapy.cz (pravý klik na místo → souřadnice). null = zatím neznámé.
+   ====================================================================== */
+const GEO = {
+  hospoda:   null,   // např. [49.8355, 18.2925]
+  mistoCinu: null,
+  babka:     null,
+  pivovar:   null,
+  doupe:     null,
+  socha:     null
+};
+/* Kam medailon vede během jednotlivých stanovišť */
+const STAGE_TARGET = { zakazka: null, hospoda: s => state.senses.hospoda ? "mistoCinu" : "hospoda", mistocinu: "babka", babka: null, pivovar: "pivovar", doupe: "doupe", boj: "socha" };
+
+/* ======================================================================
    OBSAH HRY: texty, odpovědi, nápovědy. {klíč} se nahradí místem výše.
    ====================================================================== */
 const CONFIG = {
@@ -493,6 +520,8 @@ const SFX = (() => {
   const api = {
     enabled: false,
     play(name) { if (!api.enabled || !ctx()) return; const t = ac.currentTime + .01; (api[name] || (() => {}))(t); },
+    force_play(name) { if (!ctx()) return; const t = ac.currentTime + .01; (api[name] || (() => {}))(t); },
+    ping(t) { tone(1480, t, .07, .09); tone(2220, t + .005, .05, .04); burst(t, .02, .06, "highpass", 6000, 5000); },
     paper(t) { burst(t, .22, .25, "bandpass", 3200, 1800, .8); burst(t + .12, .16, .15, "bandpass", 2400, 1400, .8); },
     seal(t) { burst(t, .05, .6, "highpass", 3000, 2000); tone(160, t, .12, .3, "triangle"); burst(t + .06, .2, .2, "bandpass", 1500, 600); },
     medallion(t) {
@@ -787,6 +816,7 @@ function renderStage(s) {
       <p class="place">${solved ? fill(s.place) : "Kam dál? Rozluštěte stopu."}</p>
       <p>${s.travel}</p>
       ${s.riddle ? `<div class="riddle"><b>Indicie</b>${fill(s.riddle)}</div>` : ""}
+      ${solved ? "" : medalHTML(s)}
       ${special}
       <div class="block ${showLock && !lockReady && !solved ? "hidden" : ""}" id="lockBlock">
         ${showLock ? `<h3>${s.type === "finale" ? "Souboj" : "Na místě"}</h3><p>${fill(s.task)}</p>${lockHTML(s, solved)}` : ""}
@@ -801,6 +831,7 @@ function renderStage(s) {
     </article>`;
   state.fresh = null;
   wireListen();
+  if (!solved) wireMedal(s); else stopGeo();
   if (s.type === "senses") wireSenses(s);
   if (s.type === "evidence") wireEvidence(s);
   if (s.type === "lair" && !solved) wireLair(s);
@@ -945,7 +976,7 @@ function wireSenses(s) {
     mode = "clear"; box.classList.add("lit");
     box.querySelectorAll(".wavec")[0].classList.add("go"); box.querySelectorAll(".wavec")[1].classList.add("go2");
     box.querySelectorAll(".fp").forEach(f => f.classList.add("go"));
-    state.senses[s.id] = true; save();
+    state.senses[s.id] = true; save(); G.refresh && G.refresh();
     await wait(3200);
     b.remove(); SFX.play("medallion");
     const lb = $("#lockBlock"); lb.classList.remove("hidden"); lb.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
@@ -1122,6 +1153,121 @@ function capSVG() {
   return `<polygon points="${teeth}" fill="#2f7a3a" stroke="#18431f" stroke-width="1"/><circle cx="23" cy="23" r="14" fill="#3e9a49" stroke="#18431f" stroke-width="1"/><path d="M15 18 q8 -6 16 0" stroke="#a6e0a0" stroke-width="2" fill="none" opacity=".7"/><text x="23" y="27" text-anchor="middle" font-size="9" fill="#e9f5e4" font-family="Alegreya SC, Georgia, serif">Z</text>`;
 }
 
+/* ---------------- Medailon podle polohy + mapa ---------------- */
+const G = { watch: null, stage: null, pos: null, acc: null, trail: [], timer: null, map: null, layers: null, demo: {}, on: false };
+function targetKey(s) { const t = STAGE_TARGET[s.id]; return typeof t === "function" ? t(s) : t; }
+function targetCoord(s) { const k = targetKey(s); return k ? (G.demo[s.id + ":" + k] || GEO[k] || null) : null; }
+function dist(a, b) { const R = 6371000, r = x => x * Math.PI / 180, dLat = r(b[0] - a[0]), dLng = r(b[1] - a[1]);
+  const q = Math.sin(dLat / 2) ** 2 + Math.cos(r(a[0])) * Math.cos(r(b[0])) * Math.sin(dLng / 2) ** 2; return 2 * R * Math.asin(Math.sqrt(q)); }
+const LEVELS = [
+  { max: 25,  n: 5, txt: "Medailon divoce vibruje. Jste na místě.", q: .12, beep: 280 },
+  { max: 60,  n: 4, txt: "Medailon se silně chvěje. Cíl je blízko.", q: .2, beep: 520 },
+  { max: 150, n: 3, txt: "Medailon se chvěje.", q: .35, beep: 950 },
+  { max: 300, n: 2, txt: "Medailon se slabě zachvěl.", q: .6, beep: 1700 },
+  { max: 600, n: 1, txt: "Medailon cosi tuší. Jste na správné straně města?", q: 1.2, beep: 3200 },
+  { max: Infinity, n: 0, txt: "Medailon mlčí. Cíl je daleko.", q: 0, beep: 0 }
+];
+function medalHTML(s) {
+  if (!targetKey(s)) return "";
+  return `<div class="medal" id="medal">
+    <div class="mrow"><button type="button" class="ghost" id="medalBtn">${G.on && G.stage === s.id ? "Uspat medailon" : "Probudit medailon"}</button>
+      <button type="button" class="ghost" id="mapBtn">Mapa s vaší polohou</button></div>
+    <div class="mstate"><span class="mbar" id="mbar"><i></i><i></i><i></i><i></i><i></i></span><span id="mtext">Medailon spí. Probuďte ho a bude se chvět, jak se budete blížit k cíli.</span></div>
+    <div class="geomap hidden" id="geomap"></div>
+    <p class="mnote" id="mnote"></p>
+  </div>`;
+}
+function stopGeo() {
+  if (G.watch !== null) { try { navigator.geolocation.clearWatch(G.watch); } catch (e) {} }
+  clearTimeout(G.timer); G.watch = null; G.on = false; G.stage = null; G.trail = [];
+  const m = $("#medallion"); if (m) m.classList.remove("near");
+  if (G.map) { try { G.map.remove(); } catch (e) {} G.map = null; }
+}
+function wireMedal(s) {
+  if (G.stage && G.stage !== s.id) stopGeo();
+  if (G.map) { try { G.map.remove(); } catch (e) {} G.map = null; }
+  const btn = $("#medalBtn"); if (!btn) return;
+  const note = $("#mnote");
+  const missing = () => !targetCoord(s);
+  const demoBtn = () => state.demo ? `<button type="button" class="ghost" id="demoTarget" style="font-size:14px;padding:4px 8px;margin-top:6px">Vyzkoušet: cíl 150 m severně ode mě</button>` : "";
+  const setNote = t => { note.innerHTML = t; const d = $("#demoTarget"); if (d) d.addEventListener("click", setDemoTarget); };
+  function setDemoTarget() {
+    if (!G.pos) { setNote("Nejdřív probuďte medailon, ať zná vaši polohu."); return; }
+    G.demo[s.id + ":" + targetKey(s)] = [G.pos[0] + 150 / 111320, G.pos[1]];
+    setNote("Testovací cíl je 150 m severně od vás. Projděte se a sledujte medailon."); update();
+  }
+  if (missing()) setNote("Pro tohle místo zatím nejsou zadané souřadnice." + (state.demo ? "<br>" + demoBtn() : ""));
+  else if (state.demo) setNote(demoBtn());
+  G.refresh = update;
+  if (G.on && G.stage === s.id) update();
+  btn.addEventListener("click", () => { if (G.on && G.stage === s.id) { stopGeo(); btn.textContent = "Probudit medailon"; paint(null); $("#mtext").textContent = "Medailon spí."; } else start(); });
+  $("#mapBtn").addEventListener("click", () => { const el = $("#geomap"); el.classList.toggle("hidden"); if (!el.classList.contains("hidden")) { if (!G.on) start(); showMap(); } });
+
+  function start() {
+    if (!("geolocation" in navigator)) { $("#mtext").textContent = "Tenhle prohlížeč polohu neumí."; return; }
+    SFX.force_play("medallion");
+    $("#mtext").textContent = "Medailon se probouzí… (povolte prosím přístup k poloze)";
+    G.on = true; G.stage = s.id; btn.textContent = "Uspat medailon";
+    try {
+      G.watch = navigator.geolocation.watchPosition(p => {
+        G.pos = [p.coords.latitude, p.coords.longitude]; G.acc = p.coords.accuracy;
+        const last = G.trail[G.trail.length - 1]; if (!last || dist(last, G.pos) > 8) G.trail.push(G.pos);
+        update();
+      }, err => {
+        $("#mtext").textContent = err.code === 1 ? "Medailon nevidí: přístup k poloze je zakázaný. Povolte ho v prohlížeči a zkuste znovu."
+          : "Polohu se nepodařilo zjistit. Zkuste vyjít víc pod širé nebe."; G.on = false; btn.textContent = "Probudit medailon";
+      }, { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
+    } catch (e) { $("#mtext").textContent = "Poloha tu nefunguje. Otevřete hru přes odkaz na GitHubu."; }
+    loop();
+  }
+  function paint(L) { document.querySelectorAll("#mbar i").forEach((b, i) => b.classList.toggle("on", !!L && i < L.n));
+    const m = $("#medallion"); if (L && L.q) { m.classList.add("near"); m.style.setProperty("--q", L.q + "s"); } else m.classList.remove("near"); }
+  function level() { const t = targetCoord(s); if (!t || !G.pos) return null; const d = dist(G.pos, t); return { d, L: LEVELS.find(l => d <= l.max) }; }
+  function update() {
+    if (!$("#mtext")) return;
+    const r = level();
+    if (!r) { if (G.pos && missing()) $("#mtext").textContent = "Medailon je vzhůru, ale cíl zatím nikdo nezadal."; paint(null); updateMap(); return; }
+    let t = r.L.txt; if (G.acc > 60) t += " (slabý signál polohy)";
+    if (state.demo) t += ` [${Math.round(r.d)} m]`;
+    $("#mtext").textContent = t; paint(r.L); updateMap();
+  }
+  function loop() {
+    clearTimeout(G.timer); if (!G.on) return;
+    const r = level(); let wait = 1500;
+    if (r && r.L.beep) { SFX.force_play("ping"); if (r.L.n >= 3) buzz(r.L.n >= 5 ? [60, 40, 60] : 40); wait = r.L.beep; }
+    G.timer = setTimeout(loop, wait);
+  }
+  function showMap() {
+    const el = $("#geomap"); if (G.map || !el) return;
+    const go = () => {
+      const c = G.pos || targetCoord(s) || [49.8355, 18.2925];
+      G.map = L.map(el, { zoomControl: true, attributionControl: true }).setView(c, 16);
+      L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(G.map);
+      G.layers = L.layerGroup().addTo(G.map); updateMap(true);
+    };
+    if (window.L) go();
+    else {
+      const css = document.createElement("link"); css.rel = "stylesheet"; css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(css);
+      const js = document.createElement("script"); js.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js";
+      js.onload = go; js.onerror = () => { el.textContent = "Mapu se nepodařilo načíst."; }; document.head.appendChild(js);
+    }
+  }
+  function updateMap(center) {
+    if (!G.map || !G.layers) return;
+    G.layers.clearLayers();
+    if (G.trail.length > 1) L.polyline(G.trail, { color: "#8f1d1d", weight: 3, dashArray: "2 8", lineCap: "round" }).addTo(G.layers);
+    if (G.pos) { L.circleMarker(G.pos, { radius: 9, color: "#ff7a1f", weight: 2, fillColor: "#ffb347", fillOpacity: .9 }).addTo(G.layers);
+      if (G.acc) L.circle(G.pos, { radius: Math.min(G.acc, 150), color: "#ff7a1f", weight: 1, fillOpacity: .06 }).addTo(G.layers); }
+    const t = targetCoord(s), used = state.hints[s.id] || 0;
+    if (t && (used >= s.hints.length || state.demo)) L.circleMarker(t, { radius: 7, color: "#8f1d1d", weight: 2, fillColor: "#8f1d1d", fillOpacity: .8 }).addTo(G.layers);
+    else if (t && used >= 2) { const off = [(((s.id.length * 37) % 7) - 3) * 0.00012, (((s.id.length * 53) % 7) - 3) * 0.00018];
+      L.circle([t[0] + off[0], t[1] + off[1]], { radius: 140, color: "#8f1d1d", weight: 2, dashArray: "4 6", fillOpacity: .08 }).addTo(G.layers); }
+    if (center && G.pos) G.map.setView(G.pos, 17);
+    else if (G.pos && !G.map.getBounds().pad(-.15).contains(G.pos)) G.map.panTo(G.pos);
+    $("#geomap").setAttribute("aria-label", "Mapa s vaší polohou");
+  }
+}
+
 /* ---------------- Konec ---------------- */
 function rank() { const h = Object.values(state.hints).reduce((a, b) => a + b, 0);
   if (state.masterUsed === 0 && h <= 3) return "Mistr cechu"; if (h <= 7 && state.masterUsed <= 1) return "Ostřílený lovec"; return "Učeň se stříbrným srdcem"; }
@@ -1147,6 +1293,7 @@ function render() {
   clearInterval(hintTimer);
   $("#demoToggle").checked = !!state.demo;
   renderHeader(); renderMap(); renderBestiary(); renderJournal();
+  if (state.step < 0 || state.step >= STEPS.length) stopGeo();
   if (state.step < 0) renderIntro(); else if (state.step >= STEPS.length) renderEnding(); else renderStage(STEPS[state.step]);
 }
 
