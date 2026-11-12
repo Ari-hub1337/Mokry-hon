@@ -67,6 +67,13 @@ header.top { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; alig
 .mbar i { width: 5px; background: rgba(90,74,58,.25); display: block; }
 .mbar i:nth-child(1) { height: 30%; } .mbar i:nth-child(2) { height: 50%; } .mbar i:nth-child(3) { height: 70%; } .mbar i:nth-child(4) { height: 85%; } .mbar i:nth-child(5) { height: 100%; }
 .mbar i.on { background: var(--ember); box-shadow: 0 0 6px rgba(255,122,31,.7); }
+.smap2 { position: relative; aspect-ratio: 4 / 3; border: 1px solid #a8916a; overflow: hidden; margin: 6px 0 12px; background: #cdbb95; }
+.smap2 .leafbox { position: absolute; inset: 0; background: #cdbb95; }
+.smap2 canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 500; }
+.smap2 .leaflet-tile-pane { filter: sepia(.6) saturate(.7) brightness(.97) contrast(1.05); transition: filter 1.4s ease; }
+.smap2.lit .leaflet-tile-pane { filter: sepia(1) hue-rotate(-18deg) saturate(1.3) brightness(.62) contrast(1.15); }
+.smap2 .leaflet-control-attribution { font-size: 10px; background: rgba(230,216,184,.8); }
+.recenter { position: absolute; right: 8px; top: 8px; z-index: 600; width: 34px; height: 34px; border: 1px solid #5a4a3a; background: rgba(230,216,184,.92); color: #2b2118; font-size: 18px; cursor: pointer; }
 .geomap { aspect-ratio: 4 / 3; border: 1px solid #a8916a; background: #cdbb95; }
 .geomap .leaflet-tile-pane { filter: sepia(.6) saturate(.7) brightness(.97) contrast(1.05); }
 .geomap .leaflet-control-attribution { font-size: 10px; background: rgba(230,216,184,.8); }
@@ -366,6 +373,8 @@ const GEO = {
   socha:     null
 };
 /* Kam medailon vede během jednotlivých stanovišť */
+/* Trasa stopy od hospody k místu činu pro zaklínačské smysly: body [šířka, délka] po cestě (stačí 5–15 bodů). null = ukázková stopa. */
+const TRAIL = null;
 const STAGE_TARGET = { zakazka: null, hospoda: s => state.senses.hospoda ? "mistoCinu" : "hospoda", mistocinu: "babka", babka: null, pivovar: "pivovar", doupe: "doupe", boj: "socha" };
 
 /* ======================================================================
@@ -401,7 +410,7 @@ const CONFIG = {
 
     { id: "hospoda", type: "senses", numeral: "II", title: "Po stopách štamgastů", place: "{hospoda} → {mistoCinu}",
       travel: "Stojíte před hospodou, kde stopy začínají. Obyčejné oko tu vidí jen dlažbu a nedopalky. Zaklínač vidí víc.",
-      sensesIntro: "Aktivujte zaklínačské smysly a sledujte stopu na mapě okolí.",
+      sensesIntro: "Aktivujte zaklínačské smysly. Stopa se rozsvítí jen kolem vás, takže ji musíte jít krok za krokem. Medailon zesílí, jak se budete blížit k místu činu.",
       task: "Jděte po stopě. Cestou minete {cedule}. Co na ní stojí?",
       answers: ["stopa"],
       hints: ["Odpověď najdete cestou, ne až na konci stopy.", "Dívejte se nahoru, cedule visí ve výšce očí nebo výš.", "Odpověď je napsaná na: {cedule}."],
@@ -479,7 +488,7 @@ const CONFIG = {
 const STEPS = CONFIG.stages;
 const KEY = "mokry-hon-v3";
 const fill = s => String(s ?? "").replace(/\{(\w+)\}/g, (m, k) => PLACES[k] ?? m);
-const blank = () => ({ step: -1, solved: {}, hints: {}, nextHintAt: {}, demo: true, sound: false, startedAt: 0, finishedAt: 0, masterUsed: 0, fresh: null, senses: {}, evidence: [], aard: false, maze: null });
+const blank = () => ({ step: -1, solved: {}, hints: {}, nextHintAt: {}, demo: true, sound: false, startedAt: 0, finishedAt: 0, masterUsed: 0, fresh: null, senses: {}, evidence: [], aard: false, maze: null, trailSeen: [], sensesEnd: false });
 let state = blank();
 function load(saved) {
   if (saved && typeof saved.step === "number") return Object.assign(blank(), saved);
@@ -831,7 +840,7 @@ function renderStage(s) {
     </article>`;
   state.fresh = null;
   wireListen();
-  if (!solved) wireMedal(s); else stopGeo();
+  if (!solved && s.type !== "senses") wireMedal(s); else if (solved) stopGeo();
   if (s.type === "senses") wireSenses(s);
   if (s.type === "evidence") wireEvidence(s);
   if (s.type === "lair" && !solved) wireLair(s);
@@ -900,87 +909,166 @@ function contractHTML() {
   return `<div class="contract-copy"><h4>${k.title}</h4>${html}<p class="sig">${k.signature}</p></div>`;
 }
 
-/* ---- II. Zaklínačské smysly ---- */
-const SMAP = {
-  start: [62, 196], end: [252, 60],
-  trail: "M62 192 C 60 172 64 150 62 130 C 62 123 68 120 76 120 L 176 120 C 186 120 190 114 190 106 L 190 72 C 190 63 196 60 205 60 L 248 60",
-  streets: ["M0 120 H320", "M62 240 V120", "M190 120 V0", "M190 60 H320", "M262 60 V240", "M110 240 L150 120", "M0 40 H120 L150 0", "M262 170 H320"],
-  blocks: [[8,128,44,46],[74,128,62,40],[150,128,34,40],[74,180,28,52],[200,72,52,40],[200,128,52,36],[200,172,52,60],[272,72,40,38],[272,120,40,40],[272,180,40,52],[8,52,44,58],[70,52,60,58],[200,8,110,42],[8,4,100,28],[130,8,50,100]]
-};
-function footprints() {
-  const svgNS = "http://www.w3.org/2000/svg", p = document.createElementNS(svgNS, "path"); p.setAttribute("d", SMAP.trail);
-  const holder = document.createElementNS(svgNS, "svg"); holder.style.position = "absolute"; holder.style.width = "0"; holder.style.height = "0"; holder.appendChild(p); document.body.appendChild(holder);
-  const L = p.getTotalLength(), out = [];
-  for (let d = 5, i = 0; d < L; d += 13, i++) {
-    const a = p.getPointAtLength(d), b = p.getPointAtLength(Math.min(L, d + 1)), ang = Math.atan2(b.y - a.y, b.x - a.x), side = i % 2 ? 3.2 : -3.2;
-    out.push({ x: a.x + Math.cos(ang + Math.PI / 2) * side, y: a.y + Math.sin(ang + Math.PI / 2) * side, r: ang * 180 / Math.PI + 90 });
+/* ---- II. Zaklínačské smysly na skutečné mapě, spojené s medailonem ---- */
+const REVEAL_M = 35;        // jak daleko kolem sebe hráč „vidí“ stopu (metry)
+const FP_STEP_M = 6;        // rozestup stop (metry)
+const DEMO_TRAIL = [[49.83505, 18.29010], [49.83540, 18.29080], [49.83575, 18.29150], [49.83605, 18.29230], [49.83630, 18.29310], [49.83620, 18.29400], [49.83640, 18.29480]];
+function trailCoords() { return (TRAIL && TRAIL.length > 1) ? TRAIL : (G.demoTrail || DEMO_TRAIL); }
+function trailIsDemo() { return !(TRAIL && TRAIL.length > 1); }
+function buildFootprints() {
+  const T = trailCoords(), out = [];
+  for (let i = 0; i < T.length - 1; i++) {
+    const a = T[i], b = T[i + 1], d = dist(a, b), n = Math.max(1, Math.floor(d / FP_STEP_M));
+    for (let k = 0; k < n; k++) { const f = k / n; out.push({ ll: [a[0] + (b[0] - a[0]) * f, a[1] + (b[1] - a[1]) * f], seg: i }); }
   }
-  holder.remove(); return out;
+  out.push({ ll: T[T.length - 1], seg: T.length - 2 });
+  return out;
+}
+function loadLeaflet(cb, fail) {
+  if (window.L && L.map) return cb();
+  if (!document.querySelector('link[data-leaflet]')) { const css = document.createElement("link"); css.rel = "stylesheet"; css.dataset.leaflet = "1"; css.href = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css"; document.head.appendChild(css); }
+  const js = document.createElement("script"); js.src = "https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"; js.onload = cb; js.onerror = fail; document.head.appendChild(js);
 }
 function sensesHTML(s) {
   const lit = !!state.senses[s.id];
-  const fps = footprints();
-  const streets = SMAP.streets.map(d => `<path d="${d}" stroke="#7b6750" stroke-width="17" fill="none" stroke-linecap="round"/>`).join("") + SMAP.streets.map(d => `<path d="${d}" stroke="#e6d6b2" stroke-width="13" fill="none" stroke-linecap="round"/>`).join("");
-  const blocks = SMAP.blocks.map(([x, y, w, h]) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="url(#hatch)" stroke="#7b6750" stroke-width="1.2"/>`).join("");
-  const steps = fps.map((f, i) => `<g class="fp ${lit ? "static" : ""}" style="--d:${(1.1 + i * .085).toFixed(2)}s" transform="translate(${f.x.toFixed(1)} ${f.y.toFixed(1)}) rotate(${f.r.toFixed(0)})"><ellipse rx="2.5" ry="3.9" fill="#ff8a2a"/><ellipse cy="-5.4" rx="1.9" ry="1.6" fill="#ff8a2a"/></g>`).join("");
-  const embers = Array.from({ length: 14 }, (_, i) => { const f = fps[Math.floor(i * fps.length / 14)]; return `<span class="ember" style="left:${(f.x / 320 * 100).toFixed(1)}%;top:${(f.y / 240 * 100).toFixed(1)}%;--d:${(i * .23).toFixed(2)}s;--dx:${(Math.random() * 16 - 8).toFixed(0)}px"></span>`; }).join("");
   return `<p>${s.sensesIntro}</p>
-    <div class="smap ${lit ? "lit static" : ""}" id="smap">
-      <svg viewBox="0 0 320 240" aria-label="Slepá mapa okolí hospody">
-        <defs>
-          <pattern id="hatch" width="5" height="5" patternUnits="userSpaceOnUse" patternTransform="rotate(45)"><rect width="5" height="5" fill="#d2bd93"/><line x1="0" y1="0" x2="0" y2="5" stroke="#b49c70" stroke-width="1.4"/></pattern>
-          <filter id="glow" x="-50%" y="-50%" width="200%" height="200%"><feGaussianBlur stdDeviation="2.4" result="b"/><feMerge><feMergeNode in="b"/><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge></filter>
-          <radialGradient id="redvig" cx="50%" cy="50%" r="70%"><stop offset=".3" stop-color="#2a0a02" stop-opacity=".25"/><stop offset="1" stop-color="#2a0a02" stop-opacity=".75"/></radialGradient>
-        </defs>
-        ${blocks}${streets}
-        <g transform="translate(${SMAP.start[0]} ${SMAP.start[1] + 18})">${ICONS.hospoda}<text y="22" text-anchor="middle" font-family="Alegreya SC, Georgia, serif" font-size="12" fill="#2b2118">Hospoda</text></g>
-        <rect class="dim" width="320" height="240" fill="url(#redvig)"/>
-        <path class="dim trailglow" d="${SMAP.trail}" stroke="#ff7a1f" stroke-width="4" fill="none" opacity=".22" filter="url(#glow)" stroke-linecap="round"/>
-        <g filter="url(#glow)">${steps}</g>
-        <g class="target" transform="translate(${SMAP.end[0]} ${SMAP.end[1]})">
-          <circle class="tring" r="9" fill="none" stroke="#ff4a1a" stroke-width="2"/>
-          <circle r="5" fill="#ff4a1a" filter="url(#glow)"/>
-          <text y="-14" text-anchor="middle" font-family="Alegreya SC, Georgia, serif" font-size="13" fill="#ffd9b0">Místo činu</text>
-        </g>
-        <circle class="wavec" cx="${SMAP.start[0]}" cy="${SMAP.start[1]}" r="10" fill="none" stroke="#ff8a2a" stroke-width="2" vector-effect="non-scaling-stroke"/>
-        <circle class="wavec w2" cx="${SMAP.start[0]}" cy="${SMAP.start[1]}" r="10" fill="none" stroke="#ffb347" stroke-width="1.5" vector-effect="non-scaling-stroke"/>
-      </svg>
-      ${embers}
-      ${lit ? "" : `<canvas id="sfog" aria-hidden="true"></canvas>`}
-    </div>
-    ${lit ? "" : `<button type="button" class="sbtn" id="sensesBtn"><svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true"><path d="M1 9 Q13 -4 25 9 Q13 22 1 9Z" fill="none" stroke="#fff1dc" stroke-width="2"/><circle cx="13" cy="9" r="4" fill="#fff1dc"/></svg>Aktivovat zaklínačské smysly</button>`}`;
+    <div class="smap2 ${lit ? "lit" : ""}" id="smap"><div class="leafbox" id="sleaf"></div><canvas id="sfog" aria-hidden="true"></canvas>
+      <button type="button" class="recenter" id="recenter" aria-label="Vycentrovat na mě">◎</button></div>
+    <div class="mstate" style="margin:-4px 0 10px"><span class="mbar" id="mbar"><i></i><i></i><i></i><i></i><i></i></span><span id="mtext">${lit ? "Smysly jsou aktivní." : "Smysly spí."}</span></div>
+    ${lit ? "" : `<button type="button" class="sbtn" id="sensesBtn"><svg width="26" height="18" viewBox="0 0 26 18" aria-hidden="true"><path d="M1 9 Q13 -4 25 9 Q13 22 1 9Z" fill="none" stroke="#fff1dc" stroke-width="2"/><circle cx="13" cy="9" r="4" fill="#fff1dc"/></svg>Aktivovat zaklínačské smysly</button>`}
+    <div class="mrow" id="sextra" style="display:flex;gap:8px;flex-wrap:wrap;margin-top:8px"></div>
+    <p class="mnote" id="snote" style="margin-top:6px"></p>`;
 }
 function wireSenses(s) {
-  if (state.senses[s.id]) return;
-  const c = $("#sfog"), box = $("#smap"), g = c.getContext("2d");
-  let W, H, puffs, hole = 0, alpha = 1, mode = "idle", raf;
-  const size = () => { const r = box.getBoundingClientRect(); W = c.width = Math.round(r.width * devicePixelRatio); H = c.height = Math.round(r.height * devicePixelRatio);
-    puffs = Array.from({ length: 34 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: (60 + Math.random() * 90) * devicePixelRatio, v: (.15 + Math.random() * .35) * devicePixelRatio })); };
-  size();
-  const sx = SMAP.start[0] / 320, sy = SMAP.start[1] / 240;
-  const draw = () => {
-    if (!c.isConnected) return cancelAnimationFrame(raf);
-    g.globalCompositeOperation = "source-over"; g.clearRect(0, 0, W, H);
-    g.globalAlpha = alpha; g.fillStyle = "rgba(92,98,96,.78)"; g.fillRect(0, 0, W, H);
-    for (const p of puffs) { const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r); gr.addColorStop(0, "rgba(205,212,208,.55)"); gr.addColorStop(1, "rgba(205,212,208,0)");
-      g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI * 2); g.fill(); p.x += p.v; if (p.x - p.r > W) p.x = -p.r; }
-    if (hole > 0) { g.globalCompositeOperation = "destination-out"; const hx = sx * W, hy = sy * H, gr = g.createRadialGradient(hx, hy, hole * .55, hx, hy, hole);
-      gr.addColorStop(0, "rgba(0,0,0,1)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.globalAlpha = 1; g.fillRect(0, 0, W, H); }
-    if (mode === "clear") { hole += W * .018; alpha = Math.max(0, alpha - .012); if (alpha <= 0) { c.remove(); return; } }
+  stopGeo();
+  const box = $("#smap"), c = $("#sfog"), g = c.getContext("2d"), note = $("#snote"), extra = $("#sextra");
+  let map = null, FP = buildFootprints(), puffs = [], W = 0, H = 0, dpr = Math.max(1, devicePixelRatio || 1), raf, waveT = 0, sim = null, lastBeep = 0, follow = true;
+  if (!Array.isArray(state.trailSeen) || state.trailSeen.length !== FP.length) { state.trailSeen = new Array(FP.length).fill(0); }
+  const lit = () => !!state.senses[s.id];
+  const endLL = () => (GEO.mistoCinu || trailCoords()[trailCoords().length - 1]);
+  const startLL = () => (GEO.hospoda || trailCoords()[0]);
+  const target = () => lit() ? endLL() : startLL();
+  function size() { const r = box.getBoundingClientRect(); W = c.width = Math.round(r.width * dpr); H = c.height = Math.round(r.height * dpr);
+    puffs = Array.from({ length: 30 }, () => ({ x: Math.random() * W, y: Math.random() * H, r: (50 + Math.random() * 80) * dpr, v: (.12 + Math.random() * .3) * dpr })); }
+  function mpp() { const z = map.getZoom(), lat = map.getCenter().lat; return 156543.03392 * Math.cos(lat * Math.PI / 180) / Math.pow(2, z); }
+  function pt(ll) { const p = map.latLngToContainerPoint(ll); return [p.x * dpr, p.y * dpr]; }
+  function setExtra() {
+    let h = "";
+    if (!lit() && !G.on) h += `<button type="button" class="ghost" id="wakeBtn" style="font-size:14px;padding:4px 8px">Probudit medailon (dovede vás k hospodě)</button>`;
+    if (state.demo) { h += `<button type="button" class="ghost" id="simBtn" style="font-size:14px;padding:4px 8px">${sim ? "Zastavit simulaci" : "Simulovat chůzi po stopě"}</button>`;
+      h += `<button type="button" class="ghost" id="hereBtn" style="font-size:14px;padding:4px 8px">Test: stopa začne u mě</button>`; }
+    if (lit()) h += `<button type="button" class="ghost" id="allBtn" style="font-size:14px;padding:4px 8px">Nefunguje poloha? Ukázat celou stopu</button>`;
+    extra.innerHTML = h;
+    const wb = $("#wakeBtn"); if (wb) wb.addEventListener("click", () => { SFX.force_play("medallion"); geo(); $("#mtext").textContent = "Medailon se probouzí… (povolte přístup k poloze)"; setExtra(); });
+    const sb = $("#simBtn"); if (sb) sb.addEventListener("click", () => sim ? stopSim() : startSim());
+    const hb = $("#hereBtn"); if (hb) hb.addEventListener("click", trailHere);
+    const ab = $("#allBtn"); if (ab) ab.addEventListener("click", () => { state.trailSeen = state.trailSeen.map(() => 1); state.sensesEnd = true; save(); fitAll(); note.textContent = "Celá stopa je zakreslená. Medailon funguje dál, pokud je poloha dostupná."; });
+  }
+  function fitAll() { if (map) map.fitBounds(L.latLngBounds(trailCoords()).pad(.25)); follow = false; }
+  function trailHere() {
+    if (!G.pos) { note.textContent = "Nejdřív aktivujte smysly, ať je známa vaše poloha (nebo spusťte simulaci)."; return; }
+    const [la, ln] = G.pos, m = 1 / 111320, mx = 1 / (111320 * Math.cos(la * Math.PI / 180));
+    G.demoTrail = [[la, ln], [la + 40 * m, ln + 10 * mx], [la + 80 * m, ln - 15 * mx], [la + 120 * m, ln + 5 * mx], [la + 160 * m, ln + 35 * mx], [la + 200 * m, ln + 25 * mx]];
+    FP = buildFootprints(); state.trailSeen = new Array(FP.length).fill(0); state.sensesEnd = false; save();
+    note.textContent = "Testovací stopa vede od vás zhruba 200 m na sever. Vydejte se po ní."; follow = true; tickPos();
+  }
+  function startSim() {
+    const T = trailCoords(); let seg = 0, f = 0; G.pos = T[0].slice(); G.acc = 5;
+    sim = setInterval(() => { const a = T[seg], b = T[seg + 1], d = dist(a, b); f += 4 / d;
+      if (f >= 1) { seg++; f = 0; if (seg >= T.length - 1) { G.pos = T[T.length - 1].slice(); tickPos(); stopSim(); return; } }
+      G.pos = [a[0] + (T[seg + 1][0] - a[0]) * f, a[1] + (T[seg + 1][1] - a[1]) * f]; tickPos(); }, 250);
+    if (!lit()) activate(); setExtra();
+  }
+  function stopSim() { clearInterval(sim); sim = null; setExtra(); }
+  function tickPos() {
+    if (!G.pos) return;
+    if (lit()) {
+      let changed = false;
+      FP.forEach((f, i) => { if (!state.trailSeen[i] && dist(G.pos, f.ll) <= REVEAL_M) { state.trailSeen[i] = 1; changed = true; } });
+      if (!state.sensesEnd && dist(G.pos, endLL()) <= 25) { state.sensesEnd = true; changed = true; SFX.force_play("medallion"); buzz([80, 60, 160]); note.textContent = "Stopa končí. Tady se to stalo."; }
+      if (changed) save();
+    }
+    if (map && follow) { const p = map.latLngToContainerPoint(G.pos), sz = map.getSize(); if (p.x < sz.x * .2 || p.x > sz.x * .8 || p.y < sz.y * .2 || p.y > sz.y * .8) map.panTo(G.pos, { animate: true }); }
+    status();
+  }
+  function status() {
+    const t = target(); if (!G.pos || !t) return;
+    const d = dist(G.pos, t), Lv = LEVELS.find(l => d <= l.max);
+    let txt = lit() ? (state.sensesEnd ? "Jste na místě činu." : Lv.txt) : (d <= 40 ? "Jste u hospody. Aktivujte smysly." : "Medailon vede k hospodě. " + Lv.txt);
+    if (G.acc > 60) txt += " (slabý signál polohy)"; if (state.demo) txt += ` [${Math.round(d)} m]`;
+    $("#mtext").textContent = txt;
+    document.querySelectorAll("#mbar i").forEach((b, i) => b.classList.toggle("on", i < Lv.n));
+    const m = $("#medallion"); if (Lv.q) { m.classList.add("near"); m.style.setProperty("--q", Lv.q + "s"); } else m.classList.remove("near");
+    const now = Date.now(); if (Lv.beep && now - lastBeep > Lv.beep) { lastBeep = now; SFX.force_play("ping"); if (Lv.n >= 3) buzz(Lv.n >= 5 ? [60, 40, 60] : 40); }
+  }
+  function geo() {
+    if (!("geolocation" in navigator)) { note.textContent = "Tenhle prohlížeč polohu neumí. Použijte „Ukázat celou stopu“."; return; }
+    try {
+      G.watch = navigator.geolocation.watchPosition(p => { if (sim) return; G.pos = [p.coords.latitude, p.coords.longitude]; G.acc = p.coords.accuracy; tickPos(); },
+        err => { if (sim) return; note.textContent = err.code === 1 ? "Přístup k poloze je zakázaný. Povolte ho v prohlížeči, nebo použijte „Ukázat celou stopu“." : "Polohu se nepodařilo zjistit. Zkuste vyjít víc pod širé nebe, případně použijte „Ukázat celou stopu“."; },
+        { enableHighAccuracy: true, maximumAge: 3000, timeout: 20000 });
+      G.on = true; G.stage = s.id;
+    } catch (e) { note.textContent = "Poloha tu nefunguje. Otevřete hru přes odkaz na GitHubu, nebo použijte „Ukázat celou stopu“."; }
+  }
+  async function activate() {
+    const b = $("#sensesBtn"); if (b) { b.disabled = true; b.style.animation = "none"; b.style.opacity = ".5"; }
+    vignette(); SFX.force_play("sensesBig"); buzz([40, 260, 40, 500, 40, 260, 40]);
+    state.senses[s.id] = true; save(); box.classList.add("lit"); waveT = performance.now();
+    tickPos(); setExtra();
+    await wait(1600);
+    if (b) b.remove(); SFX.force_play("medallion");
+    const lb = $("#lockBlock"); lb.classList.remove("hidden");
+    if (trailIsDemo() && !G.demoTrail && !sim) note.textContent = "Skutečná trasa zatím není zadaná, na mapě je ukázková stopa v centru Ostravy. Vyzkoušejte simulaci chůze.";
+  }
+  function draw(now) {
+    if (!c.isConnected) { stopSim(); return; }
     raf = requestAnimationFrame(draw);
-  };
-  if (reduced) { mode = "idle"; } draw();
-  $("#sensesBtn").addEventListener("click", async () => {
-    const b = $("#sensesBtn"); b.disabled = true; b.style.animation = "none"; b.style.opacity = ".5";
-    vignette(); SFX.play("sensesBig"); buzz([40, 260, 40, 500, 40, 260, 40]);
-    mode = "clear"; box.classList.add("lit");
-    box.querySelectorAll(".wavec")[0].classList.add("go"); box.querySelectorAll(".wavec")[1].classList.add("go2");
-    box.querySelectorAll(".fp").forEach(f => f.classList.add("go"));
-    state.senses[s.id] = true; save(); G.refresh && G.refresh();
-    await wait(3200);
-    b.remove(); SFX.play("medallion");
-    const lb = $("#lockBlock"); lb.classList.remove("hidden"); lb.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" });
-  });
+    if (!map) return;
+    g.setTransform(1, 0, 0, 1, 0, 0); g.globalCompositeOperation = "source-over"; g.clearRect(0, 0, W, H);
+    const pxm = dpr / mpp(), hole = (lit() ? REVEAL_M * 1.5 : 25) * pxm, P = G.pos ? pt(G.pos) : null;
+    // mlha
+    g.fillStyle = lit() ? "rgba(40,18,10,.62)" : "rgba(92,98,96,.72)"; g.fillRect(0, 0, W, H);
+    for (const p of puffs) { const gr = g.createRadialGradient(p.x, p.y, 0, p.x, p.y, p.r); gr.addColorStop(0, lit() ? "rgba(120,60,40,.35)" : "rgba(205,212,208,.5)"); gr.addColorStop(1, "rgba(0,0,0,0)");
+      g.fillStyle = gr; g.beginPath(); g.arc(p.x, p.y, p.r, 0, Math.PI * 2); g.fill(); if (!reduced) { p.x += p.v; if (p.x - p.r > W) p.x = -p.r; } }
+    if (P) { g.globalCompositeOperation = "destination-out"; const gr = g.createRadialGradient(P[0], P[1], hole * .45, P[0], P[1], hole);
+      gr.addColorStop(0, "rgba(0,0,0,1)"); gr.addColorStop(1, "rgba(0,0,0,0)"); g.fillStyle = gr; g.fillRect(0, 0, W, H); g.globalCompositeOperation = "source-over"; }
+    // stopy
+    if (lit()) {
+      const pulse = .75 + .25 * Math.sin(now / 380), fsz = Math.max(2.6 * dpr, Math.min(6 * dpr, 1.5 * pxm));
+      FP.forEach((f, i) => {
+        if (!state.trailSeen[i]) return;
+        const q = pt(f.ll), nx = FP[Math.min(FP.length - 1, i + 1)], r = pt(nx.ll), ang = (i === FP.length - 1) ? 0 : Math.atan2(r[1] - q[1], r[0] - q[0]);
+        const near = G.pos && dist(G.pos, f.ll) <= REVEAL_M, side = (i % 2 ? 1 : -1) * fsz * .9;
+        g.save(); g.translate(q[0] + Math.cos(ang + Math.PI / 2) * side, q[1] + Math.sin(ang + Math.PI / 2) * side); g.rotate(ang + Math.PI / 2);
+        g.globalAlpha = near ? pulse : .32; g.shadowColor = "rgba(255,110,20,.95)"; g.shadowBlur = near ? 14 * dpr : 4 * dpr; g.fillStyle = near ? "#ff8a2a" : "#e07a3a";
+        g.beginPath(); g.ellipse(0, 0, fsz * .6, fsz, 0, 0, Math.PI * 2); g.fill(); g.beginPath(); g.ellipse(0, -fsz * 1.35, fsz * .45, fsz * .4, 0, 0, Math.PI * 2); g.fill(); g.restore();
+      });
+      g.globalAlpha = 1; g.shadowBlur = 0;
+      if (state.sensesEnd) { const e = pt(endLL()), rr = (6 + 10 * ((now / 1600) % 1)) * dpr;
+        g.strokeStyle = `rgba(255,74,26,${1 - ((now / 1600) % 1)})`; g.lineWidth = 2 * dpr; g.beginPath(); g.arc(e[0], e[1], rr * 1.6, 0, Math.PI * 2); g.stroke();
+        g.fillStyle = "#ff4a1a"; g.shadowColor = "#ff4a1a"; g.shadowBlur = 12 * dpr; g.beginPath(); g.arc(e[0], e[1], 5 * dpr, 0, Math.PI * 2); g.fill(); g.shadowBlur = 0;
+        g.font = `${13 * dpr}px "Alegreya SC", Georgia, serif`; g.fillStyle = "#ffd9b0"; g.textAlign = "center"; g.fillText("Místo činu", e[0], e[1] - 14 * dpr); }
+    }
+    // vlna při aktivaci
+    if (waveT && P) { const t = (now - waveT) / 2000; if (t < 1) { [0, .22].forEach(o => { const tt = t - o; if (tt <= 0) return;
+        g.strokeStyle = `rgba(255,138,42,${(1 - tt) * .9})`; g.lineWidth = 2.5 * dpr; g.beginPath(); g.arc(P[0], P[1], tt * Math.max(W, H) * .8, 0, Math.PI * 2); g.stroke(); }); } else waveT = 0; }
+    // hráč
+    if (P) { g.fillStyle = "#ffb347"; g.strokeStyle = "#ff7a1f"; g.lineWidth = 2 * dpr; g.shadowColor = "rgba(255,140,40,.9)"; g.shadowBlur = 10 * dpr;
+      g.beginPath(); g.arc(P[0], P[1], 6 * dpr, 0, Math.PI * 2); g.fill(); g.stroke(); g.shadowBlur = 0; }
+    else if (!lit()) { const h0 = pt(startLL()); g.font = `${13 * dpr}px "Alegreya SC", Georgia, serif`; g.fillStyle = "#f0e6d0"; g.textAlign = "center"; g.fillText("Mlha… aktivujte smysly", W / 2, H / 2); }
+  }
+  size(); addEventListener("resize", size, { once: true });
+  loadLeaflet(() => {
+    map = L.map($("#sleaf"), { zoomControl: false, attributionControl: true }).setView(G.pos || startLL(), 17);
+    L.tileLayer("https://tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: "© OpenStreetMap" }).addTo(map);
+    map.on("dragstart", () => { follow = false; });
+    $("#recenter").addEventListener("click", () => { follow = true; if (G.pos) map.setView(G.pos, 17); });
+    requestAnimationFrame(draw);
+  }, () => { note.textContent = "Mapu se nepodařilo načíst. Zkontrolujte připojení k internetu."; });
+  setExtra();
+  if (lit()) { geo(); }
+  else $("#sensesBtn").addEventListener("click", () => { if (!G.on) geo(); activate(); });
+  G.refresh = () => {};
 }
 
 /* ---- III. Ohledání ---- */
@@ -1168,7 +1256,7 @@ const LEVELS = [
   { max: Infinity, n: 0, txt: "Medailon mlčí. Cíl je daleko.", q: 0, beep: 0 }
 ];
 function medalHTML(s) {
-  if (!targetKey(s)) return "";
+  if (!targetKey(s) || s.type === "senses") return "";
   return `<div class="medal" id="medal">
     <div class="mrow"><button type="button" class="ghost" id="medalBtn">${G.on && G.stage === s.id ? "Uspat medailon" : "Probudit medailon"}</button>
       <button type="button" class="ghost" id="mapBtn">Mapa s vaší polohou</button></div>
