@@ -187,15 +187,31 @@ details.master { margin-top: 12px; font-size: 16px; } details.master summary { c
 
 /* Ohledání místa činu */
 .evgrid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 8px 0 12px; }
-.ev { font: inherit; color: inherit; background: none; border: 0; padding: 0; perspective: 900px; cursor: pointer; text-align: left; }
-.ev-inner { display: grid; transition: transform .75s cubic-bezier(.3,1.3,.5,1); transform-style: preserve-3d; }
-.ev.flipped .ev-inner { transform: rotateY(180deg); }
-.face { grid-area: 1 / 1; backface-visibility: hidden; -webkit-backface-visibility: hidden; padding: 12px; min-height: 150px; border: 1px solid var(--parchment-edge); background: rgba(255,255,255,.3); display: flex; flex-direction: column; gap: 6px; }
-.face.front { align-items: center; justify-content: center; text-align: center; }
-.face.front .nm { font-family: var(--font-label); font-weight: 700; letter-spacing: .04em; font-size: 16px; }
-.face.front .act { font-size: 13px; color: var(--wax); font-family: var(--font-label); letter-spacing: .1em; }
-.face.back { transform: rotateY(180deg); background: rgba(143,29,29,.08); border-color: rgba(143,29,29,.4); font-size: 15px; line-height: 1.35; }
-.face.back .frag { margin-top: auto; font-family: var(--font-display); font-size: 21px; color: var(--wax); line-height: 1.1; }
+.evc { font: inherit; color: var(--ink); cursor: pointer; text-align: center; padding: 12px 10px; border: 1px solid var(--parchment-edge); background: rgba(255,255,255,.3); display: flex; flex-direction: column; align-items: center; gap: 4px; min-height: 120px; }
+.evc .nm { font-family: var(--font-label); font-weight: 700; letter-spacing: .04em; font-size: 15px; }
+.evc .act { font-size: 13px; color: var(--wax); font-family: var(--font-label); letter-spacing: .1em; }
+.evc .frag { font-family: var(--font-display); font-size: 19px; line-height: 1.1; color: var(--wax); }
+.evc.open { border-color: var(--wax); background: rgba(143,29,29,.08); }
+.evc.ok { border-color: rgba(79,106,69,.6); background: rgba(79,106,69,.1); cursor: default; }
+.evpanel { border: 1px solid var(--wax); background: rgba(255,255,255,.25); padding: 12px 14px; margin: -2px 0 12px; }
+.howto { font-style: italic; color: var(--ink-soft); margin: 0 0 10px; font-size: 16px; }
+.shards { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-width: 260px; margin: 0 auto 6px; }
+.shard { padding: 0; border: 0; background: none; cursor: pointer; aspect-ratio: 1; transition: transform .35s cubic-bezier(.3,1.4,.5,1); filter: drop-shadow(0 2px 3px rgba(0,0,0,.35)); }
+.shard svg { width: 100%; height: 100%; display: block; clip-path: polygon(3% 0, 100% 4%, 96% 100%, 0 95%); }
+.slots { display: flex; flex-wrap: wrap; gap: 14px; justify-content: center; margin: 4px 0 10px; }
+.slots .word { display: flex; gap: 3px; }
+.slot { width: 24px; height: 32px; border-bottom: 2px solid var(--ink-soft); display: grid; place-items: center; font-family: var(--font-display); font-size: 22px; color: var(--wax); }
+.tiles { display: flex; flex-wrap: wrap; gap: 6px; justify-content: center; margin-bottom: 10px; }
+.tile { width: 38px; height: 42px; font-family: var(--font-display); font-size: 22px; color: #efe4cc; background: #4a4038; border: 0; cursor: pointer; box-shadow: inset 0 -3px 0 rgba(0,0,0,.3); }
+.tile:disabled { opacity: .2; cursor: default; }
+.drops { background: radial-gradient(circle at 50% 50%, #cfbd98, #b9a47c); border: 1px solid #a8916a; }
+.drops svg { display: block; width: 100%; height: auto; }
+.dropg { cursor: pointer; } .dropg.hit path { fill: #5e1010; }
+.dropg:focus-visible { outline: 2px solid var(--ink); }
+.strips { display: grid; gap: 6px; }
+.strip { font-family: var(--font-display); font-size: 22px; color: #3a1a12; text-align: left; padding: 10px 14px; border: 0; cursor: pointer; background: #d6c29a;
+  clip-path: polygon(0 8%, 4% 0, 30% 6%, 58% 0, 82% 7%, 100% 0, 98% 50%, 100% 100%, 70% 93%, 44% 100%, 18% 92%, 0 100%, 2% 50%); }
+.strip.sel { background: #e7a565; }
 .assembled { border: 1px solid rgba(143,29,29,.45); background: rgba(143,29,29,.07); padding: 12px 14px; margin-bottom: 8px; }
 .assembled p { margin: 0; font-family: var(--font-display); font-size: 25px; line-height: 1.2; color: #3a1a12; }
 
@@ -375,7 +391,7 @@ const GEO = {
 /* Kam medailon vede během jednotlivých stanovišť */
 /* Trasa stopy od hospody k místu činu pro zaklínačské smysly: body [šířka, délka] po cestě (stačí 5–15 bodů). null = ukázková stopa. */
 const TRAIL = null;
-const STAGE_TARGET = { zakazka: null, hospoda: s => state.senses.hospoda ? "mistoCinu" : "hospoda", mistocinu: "babka", babka: null, pivovar: "pivovar", doupe: "doupe", boj: "socha" };
+const STAGE_TARGET = { zakazka: null, hospoda: s => state.senses.hospoda ? "mistoCinu" : "hospoda", mistocinu: null, babka: null, pivovar: "pivovar", doupe: "doupe", boj: "socha" };
 
 /* ======================================================================
    OBSAH HRY: texty, odpovědi, nápovědy. {klíč} se nahradí místem výše.
@@ -420,12 +436,20 @@ const CONFIG = {
 
     { id: "mistocinu", type: "evidence", numeral: "III", title: "Místo činu", place: "{mistoCinu}",
       travel: "Stopy končí. Všude jsou známky prudkého boje a cákance krve. Celé to tu páchne lihem a cigaretovým kouřem. Tohle nezní jako nic z běžného zaklínačského bestiáře.",
-      evidenceIntro: "Ohledejte stopy. Každá skrývá kousek vzkazu.",
+      evidenceIntro: "Ohledejte stopy. Každá skrývá kousek vzkazu, ale nevydá ho zadarmo.",
       evidence: [
-        { name: "Rozbitý půllitr", icon: "mug", text: "Na střepech zaschlá pěna. Pil z něj někdo, kdo už nedopil.", fragment: "Na takové věci" },
-        { name: "Nedopalek", icon: "cig", text: "Ještě teplý. Kouřil ho někdo, kdo se třásl strachy.", fragment: "pamatuje jen" },
-        { name: "Krvavá kaluž", icon: "drop", text: "Krev páchne lihem tak silně, že by se dala zapálit.", fragment: "stará babka," },
-        { name: "Utržená zástěra", icon: "cloth", text: "Hospodská zástěra. Na lemu někdo naškrábal vzkaz.", fragment: "co sedává u {babka}." }
+        { name: "Rozbitý půllitr", icon: "mug", puzzle: "shards", fragment: "Na takové věci",
+          text: "Na střepech zaschlá pěna a nějaký nápis. Pil z něj někdo, kdo už nedopil.",
+          howto: "Střepy se rozkutálely. Klepnutím je otáčejte, dokud půllitr i nápis nebudou správně." },
+        { name: "Nedopalek", icon: "cig", puzzle: "anagram", fragment: "pamatuje jen",
+          text: "Ještě teplý. Kouř nad ním se stáčí do písmen, ale ta se pomíchala.",
+          howto: "Klepejte na písmena ve správném pořadí a složte z nich dvě slova." },
+        { name: "Krvavá kaluž", icon: "drop", puzzle: "drops", fragment: "stará babka,", syllables: ["STA", "RÁ ", "BAB", "KA,"],
+          text: "Krev páchne lihem tak silně, že by se dala zapálit. Kapky tvoří stopu.",
+          howto: "Krev stékala od největší kapky k nejmenší. Klepejte na kapky ve stejném pořadí." },
+        { name: "Utržená zástěra", icon: "cloth", puzzle: "strips", fragment: "co sedává u {babka}.",
+          text: "Hospodská zástěra. Na lemu někdo naškrábal vzkaz, jenže lem je roztrhaný na pruhy.",
+          howto: "Klepněte na dva pruhy a prohodíte je. Seřaďte je, ať vzkaz dává smysl." }
       ],
       task: "Najděte babku. Až budete na místě, zjistěte {babkaOtazka}.",
       answers: ["babka"],
@@ -1071,27 +1095,121 @@ function wireSenses(s) {
   G.refresh = () => {};
 }
 
-/* ---- III. Ohledání ---- */
+/* ---- III. Ohledání: každý důkaz je malá hádanka ---- */
 const EV_ICONS = {
   mug: '<path d="M10 10 h22 v30 h-22z" fill="none" stroke="#3b2d22" stroke-width="2.5"/><path d="M32 16 q9 0 9 8 q0 8 -9 8" fill="none" stroke="#3b2d22" stroke-width="2.5"/><path d="M14 10 l4 10 l3 -6 l4 12 M28 40 l-6 6 M14 40 l-4 5" stroke="#8f1d1d" stroke-width="2"/>',
   cig: '<rect x="6" y="22" width="30" height="7" fill="#efe4cc" stroke="#3b2d22" stroke-width="2"/><rect x="36" y="22" width="8" height="7" fill="#c06a2a" stroke="#3b2d22" stroke-width="2"/><path d="M42 18 q4 -6 0 -10 q-4 -4 2 -8" stroke="#8a8a8a" stroke-width="1.8" fill="none"/>',
   drop: '<path d="M24 6 C 30 18 38 24 38 32 A 14 14 0 0 1 10 32 C 10 24 18 18 24 6Z" fill="#8f1d1d"/><ellipse cx="18" cy="31" rx="3" ry="5" fill="#c84a3a" opacity=".6"/>',
   cloth: '<path d="M8 8 h30 l-4 34 l-6 -6 l-5 7 l-5 -7 l-6 6z" fill="#cdb894" stroke="#3b2d22" stroke-width="2"/><path d="M14 18 h18 M14 24 h14" stroke="#8f1d1d" stroke-width="1.6"/>'
 };
+const EV = { open: null, st: {} };
 function evidenceHTML(s) {
   const all = state.evidence.length >= s.evidence.length;
-  return `<p>${s.evidenceIntro}</p>
-    <div class="evgrid">${s.evidence.map((e, i) => { const f = state.evidence.includes(i);
-      return `<button type="button" class="ev ${f ? "flipped" : ""}" data-i="${i}" aria-pressed="${f}"><span class="ev-inner">
-        <span class="face front"><svg width="48" height="48" viewBox="0 0 48 48" aria-hidden="true">${EV_ICONS[e.icon]}</svg><span class="nm">${e.name}</span><span class="act">Ohledat</span></span>
-        <span class="face back"><span>${e.text}</span><span class="frag">„${fill(e.fragment)}“</span></span></span></button>`; }).join("")}</div>
+  return `<p>${s.evidenceIntro}</p><div id="evbox">${evBoxHTML(s)}</div>
     ${all ? `<div class="assembled"><h3 style="margin:0 0 4px;font-family:var(--font-label);font-size:14px;letter-spacing:.1em;color:var(--wax)">Poskládaný vzkaz</h3><p>${s.evidence.map(e => fill(e.fragment)).join(" ")}</p></div>` : ""}`;
 }
+function evBoxHTML(s) {
+  return `<div class="evgrid">${s.evidence.map((e, i) => { const ok = state.evidence.includes(i), open = EV.open === i;
+      return `<button type="button" class="evc ${ok ? "ok" : ""} ${open ? "open" : ""}" data-i="${i}" aria-expanded="${open}">
+        <svg width="40" height="40" viewBox="0 0 48 48" aria-hidden="true">${EV_ICONS[e.icon]}</svg>
+        <span class="nm">${e.name}</span>
+        ${ok ? `<span class="frag">„${fill(e.fragment)}“</span>` : `<span class="act">${open ? "Ohledáváte…" : "Ohledat"}</span>`}</button>`; }).join("")}</div>
+    ${EV.open !== null && !state.evidence.includes(EV.open) ? `<div class="evpanel" id="evpanel">${puzzleHTML(s, EV.open)}</div>` : ""}`;
+}
+function seededShuffle(arr, seed) { let a = seed; const r = () => { a = (a * 9301 + 49297) % 233280; return a / 233280; };
+  const o = arr.slice(); for (let i = o.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [o[i], o[j]] = [o[j], o[i]]; } return o; }
+function puzzleHTML(s, i) {
+  const e = s.evidence[i], frag = fill(e.fragment), st = EV.st[i] || (EV.st[i] = initPuzzle(e, frag));
+  let body = "";
+  if (e.puzzle === "shards") {
+    const words = frag.split(" "), mid = Math.ceil(words.length / 2), l1 = words.slice(0, mid).join(" "), l2 = words.slice(mid).join(" ");
+    const art = `<rect x="0" y="0" width="200" height="200" fill="#e9dcc0"/><path d="M48 30 h96 v150 q0 10 -10 10 h-76 q-10 0 -10 -10z" fill="#f4ecd8" stroke="#3b2d22" stroke-width="5"/>
+      <path d="M144 62 q40 0 40 38 q0 38 -40 38" fill="none" stroke="#3b2d22" stroke-width="5"/><path d="M48 30 q24 -18 48 0 q24 -18 48 0" fill="#fffaf0" stroke="#3b2d22" stroke-width="3"/>
+      <text x="96" y="96" text-anchor="middle" font-family="Pirata One, Georgia, serif" font-size="27" fill="#8f1d1d">${l1}</text>
+      <text x="96" y="132" text-anchor="middle" font-family="Pirata One, Georgia, serif" font-size="27" fill="#8f1d1d">${l2}</text>
+      <path d="M60 150 h72 M60 162 h60" stroke="#c9b48a" stroke-width="3"/>`;
+    body = `<div class="shards">${[0, 1, 2, 3].map(k => `<button type="button" class="shard" data-k="${k}" style="transform:rotate(${st.rot[k]}deg)" aria-label="Střep ${k + 1}, otočit">
+        <svg viewBox="${(k % 2) * 100} ${Math.floor(k / 2) * 100} 100 100" aria-hidden="true">${art}</svg></button>`).join("")}</div>`;
+  }
+  if (e.puzzle === "anagram") {
+    const words = frag.toUpperCase().replace(/[^A-ZÁ-Ž ]/g, "").split(/\s+/).filter(Boolean);
+    let n = 0;
+    const slots = words.map(w => `<span class="word">${w.split("").map(() => `<span class="slot">${st.picked[n] !== undefined ? st.letters[st.picked[n++]] : (n++, "")}</span>`).join("")}</span>`).join("");
+    body = `<div class="slots">${slots}</div><div class="tiles">${st.letters.map((ch, k) => `<button type="button" class="tile" data-k="${k}" ${st.picked.includes(k) ? "disabled" : ""}>${ch}</button>`).join("")}</div>
+      <div class="mrow" style="display:flex;gap:8px"><button type="button" class="ghost" id="anBack" style="font-size:14px;padding:4px 10px">Smazat poslední</button><button type="button" class="ghost" id="anReset" style="font-size:14px;padding:4px 10px">Začít znovu</button></div>`;
+  }
+  if (e.puzzle === "drops") {
+    body = `<div class="drops"><svg viewBox="0 0 300 170" aria-label="Kapky krve">${st.drops.map((d, k) => `<g class="dropg ${st.done.includes(k) ? "hit" : ""}" data-k="${k}" transform="translate(${d.x} ${d.y})" role="button" tabindex="0" aria-label="Kapka">
+        <path d="M0 ${-d.r * 1.45} C ${d.r * .55} ${-d.r * .7} ${d.r} ${-d.r * .2} ${d.r} ${d.r * .25} A ${d.r} ${d.r} 0 0 1 ${-d.r} ${d.r * .25} C ${-d.r} ${-d.r * .2} ${-d.r * .55} ${-d.r * .7} 0 ${-d.r * 1.45}Z" fill="#8f1d1d"/>
+        <ellipse cx="${-d.r * .35}" cy="${d.r * .05}" rx="${d.r * .18}" ry="${d.r * .3}" fill="#c84a3a" opacity=".6"/>
+        ${st.done.includes(k) ? `<text y="${d.r * .45}" text-anchor="middle" font-family="Pirata One, Georgia, serif" font-size="${Math.max(13, d.r * .8)}" fill="#ffe6c8">${d.syl}</text>` : ""}</g>`).join("")}</svg></div>
+      <p class="mnote">Odhalené: <b style="font-family:var(--font-display);font-size:20px;color:var(--wax)">${st.done.map(k => st.drops[k].syl).join("")}</b></p>`;
+  }
+  if (e.puzzle === "strips") {
+    body = `<div class="strips">${st.order.map((p, k) => `<button type="button" class="strip ${st.sel === k ? "sel" : ""}" data-k="${k}">${st.parts[p]}</button>`).join("")}</div>`;
+  }
+  return `<h3 style="margin:0 0 4px;font-family:var(--font-label);font-size:15px;letter-spacing:.1em;color:var(--ink-soft)">${e.name}</h3>
+    <p style="margin:0 0 6px">${e.text}</p><p class="howto">${e.howto}</p>${body}<p class="msg" id="pmsg"></p>
+    ${state.demo ? `<button type="button" class="ghost" id="evSkip" style="font-size:13px;padding:3px 8px">Přeskočit hádanku (jen v ukázce)</button>` : ""}`;
+}
+function initPuzzle(e, frag) {
+  if (e.puzzle === "shards") return { rot: [90, 270, 180, 90] };
+  if (e.puzzle === "anagram") { const letters = frag.toUpperCase().replace(/[^A-ZÁ-Ž]/g, "").split("");
+    let sh = seededShuffle(letters, 7); if (sh.join("") === letters.join("")) sh = sh.reverse(); return { letters: sh, picked: [] }; }
+  if (e.puzzle === "drops") { const syl = e.syllables || frag.split(" "), sizes = [32, 24, 18, 13, 10].slice(0, syl.length), pos = [[60, 60], [235, 115], [150, 50], [95, 128], [255, 45]];
+    const order = seededShuffle(syl.map((_, k) => k), 11); return { drops: syl.map((sy, k) => ({ syl: sy, r: sizes[k], x: pos[order[k]][0], y: pos[order[k]][1] })), done: [] }; }
+  if (e.puzzle === "strips") { const w = frag.split(" "), n = Math.min(4, w.length), parts = [];
+    for (let k = 0; k < n; k++) parts.push(w.slice(Math.round(k * w.length / n), Math.round((k + 1) * w.length / n)).join(" "));
+    let order = seededShuffle(parts.map((_, k) => k), 5); if (order.every((v, k) => v === k)) order = order.reverse(); return { parts, order, sel: null }; }
+  return {};
+}
 function wireEvidence(s) {
-  document.querySelectorAll(".ev").forEach(b => b.addEventListener("click", async () => {
+  const box = $("#evbox"); if (!box) return;
+  box.querySelectorAll(".evc").forEach(b => b.addEventListener("click", () => {
     const i = +b.dataset.i; if (state.evidence.includes(i)) return;
-    state.evidence.push(i); save(); b.classList.add("flipped"); b.setAttribute("aria-pressed", "true"); SFX.play("flip"); buzz(30);
-    if (state.evidence.length >= s.evidence.length) { await wait(1100); vignette(); SFX.play("medallion"); renderStage(s); $("#lockBlock").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" }); }
+    EV.open = EV.open === i ? null : i; SFX.play("flip"); redraw();
+    const p = $("#evpanel"); if (p) p.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
+  }));
+  const i = EV.open; if (i === null || state.evidence.includes(i)) return;
+  const e = s.evidence[i], st = EV.st[i], msg = t => { const m = $("#pmsg"); if (m) { m.textContent = t; m.className = "msg bad"; } };
+  function redraw() { box.innerHTML = evBoxHTML(s); wireEvidence(s); }
+  async function done() {
+    state.evidence.push(i); save(); EV.open = null; SFX.play("medallion"); SFX.play("clink"); buzz([60, 40, 120]); shake("quiver");
+    if (state.evidence.length >= s.evidence.length) { await wait(500); vignette(); renderStage(s); $("#lockBlock").scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "center" }); }
+    else redraw();
+  }
+  const sk = $("#evSkip"); if (sk) sk.addEventListener("click", done);
+  if (e.puzzle === "shards") box.querySelectorAll(".shard").forEach(b => b.addEventListener("click", () => {
+    const k = +b.dataset.k; st.rot[k] = (st.rot[k] + 90) % 360; b.style.transform = `rotate(${st.rot[k]}deg)`; SFX.play("tick");
+    if (st.rot.every(r => r === 0)) setTimeout(done, 450);
+  }));
+  if (e.puzzle === "anagram") {
+    const total = st.letters.length;
+    box.querySelectorAll(".tile").forEach(b => b.addEventListener("click", () => {
+      st.picked.push(+b.dataset.k); SFX.play("tick");
+      if (st.picked.length === total) {
+        const got = st.picked.map(k => st.letters[k]).join(""), want = fill(e.fragment).toUpperCase().replace(/[^A-ZÁ-Ž]/g, "");
+        if (got === want) { redraw(); setTimeout(done, 300); return; }
+        st.picked = []; redraw(); msg("Kouř se rozplynul. Tohle slova nedává, zkuste to znovu."); SFX.play("wrong"); return;
+      }
+      redraw();
+    }));
+    $("#anBack").addEventListener("click", () => { st.picked.pop(); redraw(); });
+    $("#anReset").addEventListener("click", () => { st.picked = []; redraw(); });
+  }
+  if (e.puzzle === "drops") box.querySelectorAll(".dropg").forEach(g => {
+    const hit = () => { const k = +g.dataset.k; if (st.done.includes(k)) return;
+      const next = st.drops.map((d, j) => j).filter(j => !st.done.includes(j)).sort((a, b) => st.drops[b].r - st.drops[a].r)[0];
+      if (k === next) { st.done.push(k); SFX.play("tick"); redraw(); if (st.done.length === st.drops.length) setTimeout(done, 500); }
+      else { st.done = []; redraw(); msg("Krev se slila dohromady. Začněte znovu od největší kapky."); SFX.play("wrong"); buzz(80); } };
+    g.addEventListener("click", hit); g.addEventListener("keydown", ev => { if (ev.key === "Enter" || ev.key === " ") { ev.preventDefault(); hit(); } });
+  });
+  if (e.puzzle === "strips") box.querySelectorAll(".strip").forEach(b => b.addEventListener("click", () => {
+    const k = +b.dataset.k;
+    if (st.sel === null) { st.sel = k; SFX.play("tick"); redraw(); return; }
+    if (st.sel !== k) { [st.order[st.sel], st.order[k]] = [st.order[k], st.order[st.sel]]; SFX.play("flip"); }
+    st.sel = null; redraw();
+    if (st.order.every((v, j) => v === j)) setTimeout(done, 400);
   }));
 }
 
@@ -1402,7 +1520,7 @@ function start(saved) {
   window.claude?.hot?.snapshot?.(() => state);
   $("#musicLink").href = CONFIG.musicLink;
   $("#demoToggle").addEventListener("change", e => { state.demo = e.target.checked; save(); render(); });
-  $("#resetBtn").addEventListener("click", () => { const d = state.demo, snd = state.sound; stopAll(); state = blank(); state.demo = d; state.sound = snd; MAZE = null; save(); render(); window.scrollTo({ top: 0 }); });
+  $("#resetBtn").addEventListener("click", () => { const d = state.demo, snd = state.sound; stopAll(); state = blank(); state.demo = d; state.sound = snd; MAZE = null; EV.open = null; EV.st = {}; save(); render(); window.scrollTo({ top: 0 }); });
   $("#soundBtn").addEventListener("click", () => setSound(!state.sound));
   $("#medallion").addEventListener("click", () => { shake("quiver"); SFX.play("medallion"); });
   $("#voiceTest").addEventListener("change", async e => {
